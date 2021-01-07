@@ -1,4 +1,6 @@
 Revision history for Store-Directories
 
+0.2     January 7, 2021
+        - Added get_in_dir, run_in_dir and get_or_set methods.
 0.1     January 7, 2021
         Initial Version

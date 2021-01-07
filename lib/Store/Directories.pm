@@ -4,7 +4,7 @@ use 5.006;
 use strict;
 use warnings;
 
-our $VERSION = '0.1';
+our $VERSION = '0.2';
 
 =head1 NAME
 
@@ -455,7 +455,114 @@ END
     return \%entries;
 }
 
+=item * B<get_in_dir> I<KEY>, I<SUB>
+
+Get a shared lock for the directory with key, C<KEY>, then execute the
+subroutine reference, C<SUB> (calling with the absolute path to the directory
+as the first and only argument). Returns whatever C<SUB> returns. Essentially,
+this is just a convenient shortcut for something like this:
+
+    my $dir  = $store->get_or_add('foo');
+    my $lock = $store->lock_sh('foo');
+    my $val = do_whatever($dir);
+
+    # shortcut
+    my $val = $store->get_in_dir('foo', \&do_whatever);
+
+Naturally, your C<SUB> subroutine shouldn't modify the contents of the
+directory or else you'll be violating the trust that L<Store::Directories>
+(and other processes!) place in you.
+=cut
+sub get_in_dir {
+    my ($self, $key, $sub) = @_;
+
+    croak "'SUB' must be a subroutine ref." unless (ref $sub eq 'CODE');
+
+    my $lock;
+    return $sub->( $self->get_or_add($key, {lock_sh=>\$lock}) );
+}
+
+=item * B<run_in_dir> I<KEY>, I<SUB>
+
+Get an exclusive lock for the directory with key, C<KEY>, then execute the
+subroutine reference, C<SUB> (calling with the absolute path to the directory
+as the first and only argument). Returns whatever C<SUB> returns. Essentially,
+this is just a convenient shortcut for something like this:
+
+    my $dir  = $store->get_or_add('foo');
+    my $lock = $store->lock_ex('foo');
+    my $val = do_whatever($dir);
+
+    # shortcut
+    my $val = $store->run_in_dir('foo', \&do_whatever);
+
+Unlike C<get_in_dir>, your C<SUB> subroutine is allowed to modify (or even
+delete!) the directory and its contents.
+=cut
+sub run_in_dir {
+    my ($self, $key, $sub) = @_;
+
+    croak "'SUB' must be a subroutine ref." unless (ref $sub eq 'CODE');
+
+    my $lock;
+    return $sub->( $self->get_or_add($key, {lock_ex=>\$lock}) );
+}
+
+=item * B<get_or_set> I<KEY>, I<GET>, I<SET>
+
+A combination of C<get_in_dir> and C<run_in_dir>. C<GET> and C<SET> are
+subroutine references. For the directory with key, C<KEY>, runs the C<GET>
+subroutine under a shared lock and returns whatever it returns. But if C<GET>
+returns C<undef>, then it will call C<SET> under an exclusive lock before
+trying C<GET> again. (If it returns C<undef> this time, then this method
+will just return C<undef>).
+
+Both subroutines are called with the absolute path to the directory as the
+first, and only argument. If any of them die, then this entire function will
+croak.
+
+This is useful when you have multiple processes that may want to perform some
+operation in the same directory, but you want to make sure that operation is
+only performed once. C<GET> can be made to return undef if it detects the
+operation has not been done yet, while C<SET> performs the operation.
+
+Be aware that C<GET> may actually get called up to three times. First, under
+the shared lock. And, if it returns C<undef>, then it will be called again
+immediately after upgrading to an exclusive lock (in case another process got
+to the exclusive lock first and already called C<SET> for us). If that's still
+C<undef>, then it will be called a third and final time.
+=cut
+sub get_or_set {
+    my ($self, $key, $get, $set) = @_;
+
+    croak "'GET' must be a subroutine ref." unless (ref $get eq 'CODE');
+    croak "'SET' must be a subroutine ref." unless (ref $set eq 'CODE');
+
+    my $sh;
+    my $dir = $self->get_or_add( $key, {lock_sh=>\$sh} );
+
+
+    my $retval = $get->($dir);
+    return $retval if defined $retval;
+
+    # GET failed, so we need to call SET
+
+    # Get an exclusive lock
+    $sh->DESTROY;
+    my $ex = $self->lock_ex($key);
+
+    # It's possible that another process beat us to the exclusive lock
+    # and just called SET for us, so we need to check GET again
+    $retval = $get->($dir);
+    return $retval if defined $retval;
+
+    # Looks like *we're* the ones who're going to have to call SET after all
+    $set->($dir);
+    return $get->($dir);
+}
+
 =back
+
 
 =cut
 
