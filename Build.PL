@@ -26,6 +26,11 @@ my $builder = Module::Build->new(
         'IPC::System::Simple'   => '1.30'
     },
     add_to_cleanup     => [ 'Store-Directories-*' ],
+    meta_merge => {
+        resources => {
+            repository => 'https://github.com/camtauxe/store-directories.git'
+        }
+    }
 );
 
 $builder->add_build_element('sql');
