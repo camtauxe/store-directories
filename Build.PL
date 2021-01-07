@@ -15,6 +15,8 @@ my $builder = Module::Build->new(
     },
     test_requires => {
         'Test::More' => '0',
+        'Test::Cmd'  => '1.09',
+        'IPC::System::Simple' => '1.30'
     },
     requires => {
         'perl'          => '5.014',

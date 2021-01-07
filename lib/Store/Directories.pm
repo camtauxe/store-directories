@@ -8,8 +8,8 @@ our $VERSION = '0.1';
 
 =head1 NAME
 
-Store::Directories - Manage a key/value store of directories with locking
-capabilities
+Store::Directories - Manage a key/value store of directories with controls for
+concurrent access and locking.
 
 =head1 SYNOPSIS
 
@@ -62,8 +62,36 @@ L<Store::Directories> manages a key/value store of directories and allows
 processes to assert shared (read-only) or exclusive (writable) locks on
 those directories.
 
+Directories in a L<Store::Directories> Store are referenced by unique
+string "keys". Internally, the directories are named with hexadecimal UUIDS,
+so the keys you use to identify them can contain illegal or unusual characters
+for filenames. (web URLs are a common example).
+
+Processes can perform operations on these directories in parallel by requesting
+"locks" on particualr directories. These locks can be either I<shared> or
+I<exclusive> (to borrow L<flock(2)> terminology). Lock objects are obtained
+with the C<lock_sh> or C<lock_ex> methods of a L<Store::Directories> instance
+and are automatically released once they go out of scope.
+
+B<Shared> locks are used when a process wants to read, but not modify the
+contents of a directory while being sure that no other process can modify the
+contents while its reading. There can be multiple shared locks from different
+processes on a directory at once, but never at the same time as an I<exclusive>
+lock.
+
+B<Exclusive> locks are used when a process wants to read I<and> modify the
+contents of a directory while being sure that no other process can modify
+or read the contents while its working. There can only be one exclusive lock
+on a directory at once and there can't be any I<shared> locks with it.
+
+If a process requests a lock that is unavailable at the moment (due to another
+process already having an incompatible lock), then the process will block until
+the lock can be obtained (either by the other process dying or releasing its
+locks). Be aware that the order in which locks are granted is I<not> necessarily
+the same order that that they were requested in.
+
 B<WARNING:> The guarantees around locking make the assumption that every
-process is using this Distribution and playing by its rules.
+process is using this package and playing by its rules.
 Unrelated processes are free to ignore the rules and mess things up as
 much as they like.
 
@@ -414,7 +442,10 @@ sub get_listing {
     my $dbh = $self->_new_connection;
 
     my %entries = %{
-        $dbh->selectall_hashref("SELECT slug, dir FROM entry", 'slug');
+        $dbh->selectall_hashref(<<'END', 'slug');
+        SELECT slug, dir FROM entry
+        WHERE slug NOT LIKE '\_\_%\_\_' ESCAPE '\'
+END
     };
     $dbh->err and croak "Failed to fetch entries: ".$dbh->errstr;
 

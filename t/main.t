@@ -4,7 +4,7 @@ use warnings;
 use Config;
 use Cwd qw(abs_path);
 use Time::HiRes qw(sleep);
-use Test::More  tests => 409;
+use Test::More  tests => 425;
 use Test::Cmd;
 
 use DBI;
@@ -48,8 +48,9 @@ $dbh->disconnect;
 
 # Conduct simulataneous tests for 5 different keys
 # (405 tests)
+my @testkeys = qw'foo bar baaz quux blarg';
 my $waiting = 0;
-for my $testkey (qw'foo bar baaz quux blarg') {
+for my $testkey (@testkeys) {
     my $pid = fork;
     die "unable to fork: $!" unless defined $pid;
     
@@ -66,6 +67,28 @@ for my $testkey (qw'foo bar baaz quux blarg') {
 while ($waiting) {
     wait;
     $waiting--;
+}
+
+# Test that get_listing works
+# (6 tests)
+my %listing = %{$store->get_listing};
+is(scalar(keys %listing), scalar(@testkeys), "Correct number of entries");
+while (my ($key, $dir) = each %listing) {
+    ok(-d $dir, "Directory '$key' exists.");
+}
+
+# Remove each test directory after confirming they have
+# the correct value
+# (10 tests)
+for my $testkey (@testkeys) {
+    my $lock;
+    my $dir = $store->get_or_add($testkey, {lock_ex => \$lock} );
+    $store->remove($testkey, sub {
+        my $value = read_file_in_dir($dir);
+        is($value, 10, "Value in directory '$testkey' is correct");
+    });
+    # Confirm that the directory has been removed
+    ok( !(-d $dir), "Directory '$testkey' is gone" );
 }
 
 #
