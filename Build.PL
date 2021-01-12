@@ -1,4 +1,4 @@
-use 5.006;
+use 5.014;
 use strict;
 use warnings;
 use Module::Build;
@@ -17,10 +17,14 @@ my $builder = Module::Build->new(
         'Test::More' => '0',
     },
     requires => {
-        #'ABC'              => '1.6',
-        #'Foo::Bar::Module' => '5.0401',
+        'perl'          => '5.014',
+        'DBD::SQLite'   => '1.66',
+        'Data::UUID'    => '1.226',
+        'SQL::SplitStatement'   => '1.00020',
+        'IPC::System::Simple'   => '1.30'
     },
     add_to_cleanup     => [ 'Store-Directories-*' ],
 );
 
+$builder->add_build_element('sql');
 $builder->create_build_script();
