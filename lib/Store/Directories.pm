@@ -359,8 +359,8 @@ sub lock_ex {
 Remove the directory with the given key from the store. You I<MUST> have an
 exclusive lock already on the directory before calling this. C<SUB> is a
 subroutine ref which, if specified, will be called immediately before deleting
-the directory. C<SUB> is called with the path to the directory as the first and
-only argument.
+the directory. C<SUB> is called with the path to the directory as the first
+argument and the key for the directory as the second argument.
 
 If an error occurs removing the directory from disk, (from C<SUB> failing,
 or otherwise), then the directory will still be removed from the store's index
@@ -406,7 +406,7 @@ sub remove {
     eval {
         if ($callback) {
             die "'SUB' must be a subroutine ref" unless ref $callback eq 'CODE';
-            $callback->($path);
+            $callback->($path, $key);
         }
         $self->_remove_directory_from_disk($dir);
         1;
